@@ -24,7 +24,7 @@ tell(a,p): tell results for a(t+1),p(t+1) of batch
 
 
 class Dataset:
-	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"]):
+	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"], forcing=False):
 		"""
 		create dataset
 		:w: width of domains
@@ -83,12 +83,21 @@ class Dataset:
 		self.mousey = 0
 		self.mousev = 0
 		self.mousew = 0
+  
+		self.forcing = forcing
+  
+		if self.forcing:
+			self.X = torch.zeros(dataset_size, dtype=torch.int64)
+			self.Y = torch.zeros(dataset_size, dtype=torch.int64)
+			self.v_obs = torch.zeros(dataset_size, 2, h, w)
 		
 		for i in range(dataset_size):
 			self.reset_env(i)
 		
 		self.t = 0
 		self.i = 0
+  
+		
 	
 	def reset_env(self,index):
 		"""
@@ -97,6 +106,10 @@ class Dataset:
 		"""
 		self.a[index,:,:,:] = 0
 		self.p[index,:,:,:] = 0
+		if self.forcing:
+			self.X[index] = torch.randint(0, self.w, (1,))
+			self.Y[index] = torch.randint(0, self.h, (1,))
+			self.v_obs[index,:,:,:] = 0
 		if self.init_rho is not None:
 			self.rho[index,:,:,:] = self.init_rho
 		
@@ -676,9 +689,11 @@ class Dataset:
 			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices],self.n_cond_mask[self.indices]
 		if self.init_rho is not None:
 			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices],self.rho[self.indices]
+		if self.forcing:
+			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices]
 		return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices]
-	
-	def tell(self,a,p,rho=None):
+
+	def tell(self,a,p,rho=None, v_obs=None):
 		"""
 		return the updated fluid state (a and p) to the dataset
 		"""
@@ -686,7 +701,9 @@ class Dataset:
 		self.p[self.indices,:,:,:] = p.detach()
 		if self.init_rho is not None:
 			self.rho[self.indices,:,:,:] = rho.detach()
-		
+		if self.forcing:
+			self.v_obs[self.indices,:,:,:] = v_obs.detach()
+  
 		self.t += 1
 		if self.t % (self.average_sequence_length/self.batch_size) == 0:#ca x*batch_size steps until env gets reset
 			self.reset_env(int(self.i))
