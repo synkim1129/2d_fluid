@@ -15,7 +15,7 @@ import pickle
 
 class Logger():
 	
-	def __init__(self,name,datetime=None,use_csv=True,use_tensorboard=False):
+	def __init__(self,name,datetime=None,use_csv=True,use_tensorboard=False, forcing=False):
 		"""
 		Logger logs metrics to CSV files / tensorboard
 		:name: logging name (e.g. model name / dataset name / ...)
@@ -23,6 +23,9 @@ class Logger():
 		:use_csv: log output to csv files (needed for plotting)
 		:use_tensorboard: log output to tensorboard
 		"""
+		if forcing:
+			name += ' with_forcing'
+   
 		self.name = name
 		if datetime:
 			self.datetime=datetime
@@ -39,6 +42,8 @@ class Logger():
 			directory = 'Logger/tensorboard/{} {}'.format(name,self.datetime)
 			os.makedirs(directory,exist_ok=True)
 			self.writer = SummaryWriter(directory)
+   
+		self.forcing = forcing
 	
 	
 	def log(self,item,value,index):
@@ -172,7 +177,6 @@ class Logger():
 		:continue_datetime: flag whether to continue on this run. Default: False
 		:return: datetime, index (helpful, if datetime / index wasn't given)
 		"""
-		
 		if datetime is None:
 			for _,dirs,_ in os.walk('Logger/{}/'.format(self.name)):
 				datetime = sorted(dirs)[-1]
