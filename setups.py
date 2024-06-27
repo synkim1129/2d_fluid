@@ -701,7 +701,7 @@ class Dataset:
 		self.p[self.indices,:,:,:] = p.detach()
 		if self.init_rho is not None:
 			self.rho[self.indices,:,:,:] = rho.detach()
-		if self.forcing:
+		if self.forcing and v_obs is not None:
 			self.v_obs[self.indices,:,:,:] = v_obs.detach()
   
 		self.t += 1
