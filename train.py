@@ -29,7 +29,7 @@ fluid_model.train()
 optimizer = Adam(fluid_model.parameters(),lr=params.lr)
 
 # initialize Logger and load model / optimizer if according parameters were given
-logger = Logger(get_hyperparam(params),use_csv=False,use_tensorboard=params.log)
+logger = Logger(get_hyperparam(params),datetime=params.load_date_time, use_csv=False,use_tensorboard=params.log)
 if params.load_latest or params.load_date_time is not None or params.load_index is not None:
 	load_logger = Logger(get_hyperparam(params),use_csv=False,use_tensorboard=False)
 	if params.load_optimizer:
@@ -47,9 +47,9 @@ def loss_function(x):
 	return torch.pow(x,2)
 
 # training loop
-for epoch in range(params.load_index,params.n_epochs):
+for epoch in range(params.load_index,params.n_epochs): # default: range(0,1000)
 
-	for i in range(params.n_batches_per_epoch):
+	for i in range(params.n_batches_per_epoch): # default: range(5000)
 		v_cond,cond_mask,flow_mask,a_old,p_old = toCuda(dataset.ask())
 		
 		# convert v_cond,cond_mask,flow_mask to MAC grid
