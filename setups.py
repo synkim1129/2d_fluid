@@ -681,7 +681,7 @@ class Dataset:
 			self.mousev = min(max(self.mousev,-self.max_speed),self.max_speed)
 			self.mousew = min(max(self.mousew,-self.max_speed),self.max_speed)
 		
-		self.indices = np.random.choice(self.dataset_size,self.batch_size)
+		self.indices = np.random.choice(self.dataset_size,self.batch_size) # random choice of indices, default: self.dataset_size = 1000, self.batch_size = 100
 		self.update_envs(self.indices)
 		if self.n_cond and self.init_rho is not None:
 			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices],self.rho[self.indices],self.n_cond_mask[self.indices]
@@ -705,6 +705,6 @@ class Dataset:
 			self.v_obs[self.indices,:,:,:] = v_obs.detach()
   
 		self.t += 1
-		if self.t % (self.average_sequence_length/self.batch_size) == 0:#ca x*batch_size steps until env gets reset
+		if self.t % (self.average_sequence_length/self.batch_size) == 0:#ca x*batch_size steps until env gets reset, default: self.average_sequence_length = 5000, self.batch_size=100
 			self.reset_env(int(self.i))
 			self.i = (self.i+1)%self.dataset_size
