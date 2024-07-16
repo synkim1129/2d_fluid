@@ -84,7 +84,13 @@ for epoch in range(params.load_index,params.n_epochs): # default: range(0,1000)
 		loss_mean_a = torch.mean(a_new,dim=(1,2,3))**2
 		loss_mean_p = torch.mean(p_new,dim=(1,2,3))**2
 		
-		loss = params.loss_bound*loss_bound + params.loss_nav*loss_nav + params.loss_mean_a*loss_mean_a + params.loss_mean_p*loss_mean_p + params.regularize_grad_p*regularize_grad_p
+		loss = (
+			params.loss_bound * loss_bound
+			+ params.loss_nav * loss_nav
+			+ params.loss_mean_a * loss_mean_a
+			+ params.loss_mean_p * loss_mean_p
+			+ params.regularize_grad_p * regularize_grad_p
+		)
 		
 		loss = torch.mean(torch.log(loss))
 		
