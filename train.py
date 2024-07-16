@@ -30,6 +30,8 @@ optimizer = Adam(fluid_model.parameters(),lr=params.lr)
 
 # initialize Logger and load model / optimizer if according parameters were given
 logger = Logger(get_hyperparam(params),datetime=params.load_date_time, use_csv=False,use_tensorboard=params.log)
+logger.save_params_to_file(params)
+
 if params.load_latest or params.load_date_time is not None or params.load_index is not None:
 	load_logger = Logger(get_hyperparam(params),use_csv=False,use_tensorboard=False)
 	if params.load_optimizer:
