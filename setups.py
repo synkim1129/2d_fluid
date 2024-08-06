@@ -24,7 +24,7 @@ tell(a,p): tell results for a(t+1),p(t+1) of batch
 
 
 class Dataset:
-	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"], forcing=False):
+	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"], forcing=False, n_forcing=0):
 		"""
 		create dataset
 		:w: width of domains
@@ -87,9 +87,10 @@ class Dataset:
 		self.forcing = forcing
   
 		if self.forcing:
-			self.X = torch.zeros(dataset_size, dtype=torch.int64)
-			self.Y = torch.zeros(dataset_size, dtype=torch.int64)
+			self.X = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
+			self.Y = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.v_obs = torch.zeros(dataset_size, 2, h, w)
+			self.n_forcing = n_forcing
 		
 		for i in range(dataset_size):
 			self.reset_env(i)
@@ -107,8 +108,8 @@ class Dataset:
 		self.a[index,:,:,:] = 0
 		self.p[index,:,:,:] = 0
 		if self.forcing:
-			self.X[index] = torch.randint(0, self.w, (1,))
-			self.Y[index] = torch.randint(0, self.h, (1,))
+			self.X[index, :] = torch.randint(0, self.w, (self.n_forcing,))
+			self.Y[index, :] = torch.randint(0, self.h, (self.n_forcing,))
 			self.v_obs[index,:,:,:] = 0
 		if self.init_rho is not None:
 			self.rho[index,:,:,:] = self.init_rho
@@ -701,7 +702,7 @@ class Dataset:
 		self.p[self.indices,:,:,:] = p.detach()
 		if self.init_rho is not None:
 			self.rho[self.indices,:,:,:] = rho.detach()
-		if self.forcing and v_obs is not None:
+		if self.forcing and (v_obs is not None):
 			self.v_obs[self.indices,:,:,:] = v_obs.detach()
   
 		self.t += 1

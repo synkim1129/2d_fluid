@@ -26,6 +26,7 @@ from Logger import Logger, t_step
 from pde_cnn import get_Net
 import cv2
 from get_param import get_hyperparam
+import pdb
 
 torch.manual_seed(0)
 torch.set_num_threads(4)
@@ -69,7 +70,7 @@ if params.load_latest or params.load_date_time is not None or params.load_index 
 params.load_index = 0 if params.load_index is None else params.load_index
 
 # initialize Dataset
-dataset = Dataset(params.width,params.height,params.batch_size,params.dataset_size,params.average_sequence_length,max_speed=params.max_speed,dt=params.dt,forcing=True)
+dataset = Dataset(params.width,params.height,params.batch_size,params.dataset_size,params.average_sequence_length,max_speed=params.max_speed,dt=params.dt,forcing=True, n_forcing=params.n_forcing)
 
 def loss_function(x):
 	return torch.pow(x, 2)
@@ -93,9 +94,10 @@ for epoch in range(params.load_index, params.n_epochs):
 
 		# predict new fluid state using pretrained model
 		with torch.no_grad():
-			batch_indices = torch.arange(params.batch_size, dtype=torch.int64)
 			a_pre_new, _ = pretrained_model(a_old, p_old, flow_mask, v_cond, cond_mask)
-			v_obs[batch_indices,:,Y_obs,X_obs] = rot_mac(a_pre_new)[batch_indices,:,Y_obs,X_obs]
+			batch_indices = torch.arange(params.batch_size, dtype=torch.int64)[:, None]
+			index_obs = (batch_indices, slice(None), Y_obs, X_obs)
+			v_obs[index_obs] = rot_mac(a_pre_new)[index_obs]
 
 		# compute boundary loss
 		loss_bound = torch.mean(loss_function(cond_mask_mac * (v_new - v_cond))[:, :, 1:-1, 1:-1],dim=(1, 2, 3))
@@ -119,10 +121,10 @@ for epoch in range(params.load_index, params.n_epochs):
 		loss_mean_p = torch.mean(p_new,dim=(1,2,3))**2
 
 		# additional loss for the difference between v_new and v_obs at point (X, Y)
-		cond_mask_values = cond_mask[batch_indices, 0, Y_obs, X_obs]
-		difference = v_new[batch_indices, :, Y_obs, X_obs] - v_obs[batch_indices, :, Y_obs, X_obs]
-		difference[cond_mask_values == 1] = 0
-		loss_diff = torch.sum(loss_function(difference), dim=(1))
+		selected_v_new = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+		selected_v_obs = v_obs[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+		selected_flow_mask = flow_mask[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+		loss_diff = torch.sum(((selected_v_new - selected_v_obs) ** 2) * selected_flow_mask, dim=(1, 2, 3))
 		
 		loss = (
 			params.loss_bound * loss_bound
