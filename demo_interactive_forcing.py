@@ -23,6 +23,7 @@ dt = params.dt
 w,h = params.width,params.height
 n_time_steps=params.average_sequence_length
 save_movie= True#False
+n_forcing = params.n_forcing
 
 # load fluid model:
 logger = Logger(get_param.get_hyperparam(params),use_csv=False,use_tensorboard=False,forcing=True)
@@ -43,7 +44,7 @@ cv2.namedWindow('v',cv2.WINDOW_NORMAL)
 cv2.namedWindow('a',cv2.WINDOW_NORMAL)
 
 if save_movie:
-	fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+	fourcc = cv2.VideoWriter_fourcc(*'DIVX')
 	movie_p = cv2.VideoWriter(f'plots/p_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w,  h))
 	movie_v = cv2.VideoWriter(f'plots/v_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w-3,  h-3))
 	movie_a = cv2.VideoWriter(f'plots/a_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w,  h))
@@ -61,12 +62,21 @@ cv2.setMouseCallback("a",mousePosition)
 FPS = 0
 quit = False
 
-# v_obs 위치와 값 지정하는 부분. netcdf 로드하여 사용할 경우 이 부분 삭제!
-x_obs = 200
-y_obs = 50
+cv2.namedWindow('obs', cv2.WINDOW_NORMAL)
+text = np.zeros((h*2, w*2, 3), np.uint8) + 255
+
+# v_obs 위치와 값 랜덤으로 설정
+x_indces = torch.randperm(w)[:n_forcing]
+y_indces = torch.randperm(h)[:n_forcing]
 v_obs = torch.zeros(1, 2, h, w)
-v_obs[0, 0, y_obs, x_obs] = -0.7
-v_obs[0, 1, y_obs, x_obs] = 0.9
+
+for i in range(n_forcing):
+	x_obs = x_indces[i]
+	y_obs = y_indces[i]
+	v_obs[0, 0, y_obs, x_obs] = 2 * torch.rand(1) - 1
+	v_obs[0, 1, y_obs, x_obs] = 2 * torch.rand(1) - 1
+	cv2.putText(text, f'v_obs at {(x_obs, y_obs)}: {v_obs[0, 0, y_obs, x_obs].item():.2f}, {v_obs[0, 1, y_obs, x_obs].item():.2f}', (10, 30 + 30 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
+cv2.imshow('obs', text)
 v_obs = v_obs.cuda()
 
 with torch.no_grad():
@@ -75,7 +85,7 @@ with torch.no_grad():
 		# types to choose from: magnus, box, pipe, image
 		# images to choose from: fish, cyber, smiley, wing
 		# backgrounds to choose from: empty, cave1, cave2
-		dataset = Dataset(w,h,1,1,interactive=True,average_sequence_length=n_time_steps,max_speed=params.max_speed,dt=dt,types=["magnus","image"],images=["fish","cyber","smiley","wing"],background_images=["empty"], forcing=True)
+		dataset = Dataset(w,h,1,1,interactive=True,average_sequence_length=n_time_steps,max_speed=params.max_speed,dt=dt,types=["box"],images=["fish","cyber","smiley","wing"],background_images=["empty"], forcing=True)
 		
 		FPS_Counter=0
 		last_time = time.time()
@@ -106,12 +116,17 @@ with torch.no_grad():
 				p = p-torch.min(p)
 				p = p/torch.max(p)
 				p = toCpu(p).unsqueeze(2).repeat(1,1,3).numpy()
+    
+				# observation point 위치 표시하는 코드
+				for x_obs, y_obs in zip(x_indces, y_indces):
+					cv2.circle(p, (x_obs.item(), y_obs.item()), 5, (0,0,0))
+     
 				if save_movie:
 					movie_p.write((255*p).astype(np.uint8))
 				cv2.imshow('p',p)
 				
 				# print out v:
-				v_new = flow_mask_mac*v_new+cond_mask_mac*v_cond
+				v = flow_mask_mac*v_new+cond_mask_mac*v_cond
 				# v_obs와 실제 v값 및 그 주변 값 출력하는 코드
 				# print('v obs: ', v_obs[0, 0, y_obs, x_obs], v_obs[0, 1, y_obs, x_obs])
 				# print('v new: ', v_new[0, 0, y_obs, x_obs], v_new[0, 1, y_obs, x_obs])
@@ -119,20 +134,29 @@ with torch.no_grad():
 				# print('v right: ', v_new[0, 0, y_obs, x_obs+1], v_new[0, 1, y_obs, x_obs+1])
 				# print('v up: ', v_new[0, 0, y_obs-1, x_obs], v_new[0, 1, y_obs-1, x_obs])
 				# print('v down: ', v_new[0, 0, y_obs+1, x_obs], v_new[0, 1, y_obs+1, x_obs])
-				vector = staggered2normal(v_new.clone())[0,:,2:-1,2:-1]
-				image = vector2HSV(vector)
-				image = cv2.cvtColor(image,cv2.COLOR_HSV2BGR)
-				image = (255 * image).astype(np.uint8)
+				v = staggered2normal(v.clone())[0,:,2:-1,2:-1]
+				v = vector2HSV(v)
+				v = cv2.cvtColor(v,cv2.COLOR_HSV2BGR)
+				v = (255 * v).astype(np.uint8)
+
+				# observation point 위치 표시하는 코드
+				for x_obs, y_obs in zip(x_indces, y_indces):
+					cv2.circle(v, (x_obs.item(), y_obs.item()), 5, (0,0,0))
+				
 				if save_movie:
-					movie_v.write(image)
-				cv2.imshow('v',image)
+					movie_v.write(v)
+				cv2.imshow('v',v)
 				
 				# print out a:
 				a = a_new[0,0].clone()
 				a = a-torch.min(a)
 				a = toCpu(a/torch.max(a)).unsqueeze(2).repeat(1,1,3).numpy()
 				a = (255 * a).astype(np.uint8)
-				cv2.circle(a, (x_obs, y_obs), 3, (0,0,0))  # v_obs 위치 표시하는 코드. 이 라인만 삭제하면 위치 표시 사라짐.
+    
+				# observation point 위치 표시하는 코드
+				for x_obs, y_obs in zip(x_indces, y_indces):
+					cv2.circle(a, (x_obs.item(), y_obs.item()), 5, (0,0,0))
+     
 				if save_movie:
 					movie_a.write(a)
 				cv2.imshow('a',a)
