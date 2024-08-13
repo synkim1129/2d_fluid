@@ -36,7 +36,7 @@ def params():
 	parser.add_argument('--loss_mean_a', default=0, type=float, help='loss factor to keep mean of a around 0')
 	parser.add_argument('--loss_mean_p', default=0, type=float, help='loss factor to keep mean of p around 0')
 	parser.add_argument('--regularize_grad_p', default=0, type=float, help='regularizer for gradient of p. evt needed for very high reynolds numbers (default: 0)')
-	parser.add_argument('--max_speed', default=1, type=float, help='max speed for boundary conditions in dataset (default: 1)')
+	parser.add_argument('--max_speed', default=100, type=float, help='max speed for boundary conditions in dataset (default: 1)')
 	parser.add_argument('--lr', default=0.001, type=float, help='learning rate of optimizer (default: 0.001)')
 	parser.add_argument('--lr_grad', default=0.001, type=float, help='learning rate of optimizer (default: 0.001)')
 	parser.add_argument('--clip_grad_norm', default=None, type=float, help='gradient norm clipping (default: None)')
@@ -54,7 +54,12 @@ def params():
 	# Setup parameters
 	parser.add_argument('--width', default=300, type=int, help='setup width')
 	parser.add_argument('--height', default=100, type=int, help='setup height')
-	
+
+	#{{{ dx, dy added
+	parser.add_argument('--dx', default=100, type=int, help='setup height')
+	parser.add_argument('--dy', default=100, type=int, help='setup height')
+	#}}}	
+
 	# Fluid parameters
 	parser.add_argument('--rho', default=1, type=float, help='fluid density rho')
 	parser.add_argument('--mu', default=1, type=float, help='fluid viscosity mu')

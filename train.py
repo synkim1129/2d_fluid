@@ -65,7 +65,7 @@ for epoch in range(params.load_index,params.n_epochs):
 		
 		# compute boundary loss
 		loss_bound = torch.mean(loss_function(cond_mask_mac*(v_new-v_cond))[:,:,1:-1,1:-1],dim=(1,2,3))
-		
+
 		# explicit / implicit / IMEX integration schemes
 		if params.integrator == "explicit":
 			v = v_old
@@ -74,11 +74,29 @@ for epoch in range(params.load_index,params.n_epochs):
 		if params.integrator == "imex":
 			v = (v_new+v_old)/2
 		
+		# {{{added
+		dudt    = (v_new[:,1:2] - v_old[:,1:2]) / dt
+		ududx   = v[:,1:2] * dx(v[:,1:2])
+		vdudy   = 0.5 * (map_vy2vx_top(v[:,0:1]) * dy_top(v[:,1:2]) + map_vy2vx_bottom(v[:,0:1]) * dy_bottom(v[:,1:2]))
+
+		dvdt    = (v_new[:,0:1] - v_old[:,0:1]) / dt
+		udvdx   = 0.5 * (map_vx2vy_left(v[:,1:2]) * dx_left(v[:,0:1]) + map_vx2vy_right(v[:,1:2]) * dx_right(v[:,0:1]))
+		vdvdy   = v[:,0:1] * dy(v[:,0:1])
+
+		dpdxl   = dx_left(p_new)
+		dpdyt   = dy_top(p_new)
+
+		dpdxr   = dx_right(p_new) 
+		dpdyb   = dy_bottom(p_new)
+
+		udel2  = laplace(v[:,1:2])
+		vdel2  = laplace(v[:,0:1])
+
 		# compute loss for momentum equation
-		loss_nav =  torch.mean(loss_function(flow_mask_mac[:,1:2]*(rho*((v_new[:,1:2]-v_old[:,1:2])/dt+v[:,1:2]*dx(v[:,1:2])+0.5*(map_vy2vx_top(v[:,0:1])*dy_top(v[:,1:2])+map_vy2vx_bottom(v[:,0:1])*dy_bottom(v[:,1:2])))+dx_left(p_new)-mu*laplace(v[:,1:2])))[:,:,1:-1,1:-1],dim=(1,2,3))+\
-                torch.mean(loss_function(flow_mask_mac[:,0:1]*(rho*((v_new[:,0:1]-v_old[:,0:1])/dt+v[:,0:1]*dy(v[:,0:1])+0.5*(map_vx2vy_left(v[:,1:2])*dx_left(v[:,0:1])+map_vx2vy_right(v[:,1:2])*dx_right(v[:,0:1])))+dy_top(p_new)-mu*laplace(v[:,0:1])))[:,:,1:-1,1:-1],dim=(1,2,3))
-		
-		regularize_grad_p = torch.mean((dx_right(p_new)**2+dy_bottom(p_new)**2)[:,:,2:-2,2:-2],dim=(1,2,3))
+		loss_nav =  torch.mean(loss_function(flow_mask_mac[:,1:2]*(rho * (dudt + ududx + vdudy) + dpdxl - mu * udel2 ))[:,:,1:-1,1:-1],dim=(1,2,3))\
+                  + torch.mean(loss_function(flow_mask_mac[:,0:1]*(rho * (dvdt + udvdx + vdvdy) + dpdyt - mu * vdel2 ))[:,:,1:-1,1:-1],dim=(1,2,3))
+		#}}}
+		regularize_grad_p = torch.mean((dpdxr**2+dpdyb**2)[:,:,2:-2,2:-2],dim=(1,2,3))
 		
 		# optional: additional loss to keep mean of a / p close to 0
 		loss_mean_a = torch.mean(a_new,dim=(1,2,3))**2
@@ -118,9 +136,22 @@ for epoch in range(params.load_index,params.n_epochs):
 			logger.log(f"loss_bound_{params.loss}",loss_bound,epoch*params.n_batches_per_epoch+i)
 			logger.log(f"loss_nav_{params.loss}",loss_nav,epoch*params.n_batches_per_epoch+i)
 			logger.log(f"regularize_grad_p",regularize_grad_p,epoch*params.n_batches_per_epoch+i)
-			
+		
 			if i%100 == 0:
 				print(f"{epoch}: i:{i}: loss: {loss}; loss_bound: {loss_bound}; loss_nav: {loss_nav};")
+
+		# test var...
+#			print(str(np.array(torch.mean(cond_mask_mac*v_cond).cpu())))
+#			print(str(np.array(torch.sum(cond_mask_mac[0,1,:,:]).cpu())))
+#			test_ind  = np.where(cond_mask_mac[0,1,:,:].cpu()*v_cond[0,1,:,:].cpu() != 0 )
+#			test_cond  = cond_mask_mac[0,1,:,:].cpu()*v_cond[0,1,:,:].cpu()
+#			test_v  = cond_mask_mac[0,1,:,:].cpu()*v_new[0,1,:,:].cpu()
+#			test_a  = a_new[0,0,:,:].cpu()
+#			print(np.sum(test)/ntest)
+#			print(torch.mean(test_v[test_ind].cpu()))
+#			print(torch.mean(test_cond[test_ind].cpu()))
+#			print(torch.max(test_a[test_ind].cpu()))
+
 	
 	# safe state after every epoch
 	if params.log:

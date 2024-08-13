@@ -4,6 +4,14 @@ from derivatives import rot_mac
 import torch.nn.functional as F
 from unet_parts import *
 
+#{{{parmas added
+from get_param import get_hyperparam
+
+max_speed =  100
+dx      =  100
+
+#}}}
+
 def get_Net(params):
 	if params.net == "UNet1":
 		pde_cnn = PDE_UNet1(params.hidden_size)
@@ -82,7 +90,10 @@ class PDE_UNet2(nn.Module):
 		x = self.up3(x, x2)
 		x = self.up4(x, x1)
 		x = self.outc(x)
-		a_new, p_new = 400*torch.tanh((a_old+x[:,0:1])/400), 10*torch.tanh((p_old+x[:,1:2])/10)
+		#{{{ scaling added
+		a_new, p_new = (400*dx*max_speed)*torch.tanh((a_old+x[:,0:1])/(400*dx*max_speed)), \
+                       (10*max_speed)*torch.tanh((p_old+x[:,1:2])/(10*max_speed))
+		#}}}
 		return a_new,p_new
 
 

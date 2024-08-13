@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
+from get_param import get_hyperparam
 
 # we can define domain boundaries inside these .png images.
 # These images were not taken into account during training to test the generalization performance of our models.
@@ -24,7 +25,7 @@ tell(a,p): tell results for a(t+1),p(t+1) of batch
 
 
 class Dataset:
-	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"]):
+	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,dx=100,dy=100,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"]):
 		"""
 		create dataset
 		:w: width of domains
@@ -83,7 +84,12 @@ class Dataset:
 		self.mousey = 0
 		self.mousev = 0
 		self.mousew = 0
-		
+	
+		#{{{ dx, dy added
+		self.dx= 100
+		self.dy= 100
+		#}}}	
+
 		for i in range(dataset_size):
 			self.reset_env(i)
 		
@@ -333,9 +339,11 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+(vx_old+object_vx)/2*self.dt
-					object_y = self.env_info[index]["y"]+(vy_old+object_vy)/2*self.dt
-					
+					#{{{ dx, dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
+					#}}}					
+
 					if object_x < object_r + 10:
 						object_x = object_r + 10
 						object_vx = -object_vx
@@ -401,8 +409,6 @@ class Dataset:
 				self.env_info[index]["x"] = object_x
 				self.env_info[index]["y"] = object_y
 				self.env_info[index]["vx"] = object_vx
-				self.env_info[index]["vy"] = object_vy
-				self.env_info[index]["flow_v"] = flow_v
 			
 			if self.env_info[index]["type"] == "DFG_benchmark":
 				object_r = self.env_info[index]["r"]
@@ -415,9 +421,11 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+(vx_old+object_vx)/2*self.dt
-					object_y = self.env_info[index]["y"]+(vy_old+object_vy)/2*self.dt
-					
+					#{{{ dx, dy added
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
+					#}}}					
+
 					if object_x < object_r + self.padding_x + 1:
 						object_x = object_r + self.padding_x + 1
 						object_vx = -object_vx
@@ -504,10 +512,12 @@ class Dataset:
 					flow_v = self.env_info[index]["flow_v"]
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
-					
-					object_x = self.env_info[index]["x"]+(vx_old+object_vx)/2*self.dt
-					object_y = self.env_info[index]["y"]+(vy_old+object_vy)/2*self.dt
-					
+
+					#{{{dx, dy added
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
+					#}}}					
+
 					if object_x < object_w + 10:
 						object_x = object_w + 10
 						object_vx = -object_vx
@@ -516,7 +526,7 @@ class Dataset:
 						object_vx = -object_vx
 						
 					if object_y < object_h + 10:
-						object_y = object_h+10
+						object_y = object_h + 10
 						object_vy = -object_vy
 					if object_y > self.h - object_h - 10:
 						object_y = self.h - object_h - 10
@@ -524,8 +534,8 @@ class Dataset:
 					
 				if self.interactive:
 					flow_v = self.mousev
-					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring,self.max_speed),-self.max_speed)
-					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring,self.max_speed),-self.max_speed)
+					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring, self.max_speed), -self.max_speed)
+					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring, self.max_speed), -self.max_speed)
 					
 					object_x = self.env_info[index]["x"]+(vx_old+object_vx)/2*self.dt
 					object_y = self.env_info[index]["y"]+(vy_old+object_vy)/2*self.dt
@@ -587,9 +597,11 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+(vx_old+object_vx)/2*self.dt
-					object_y = self.env_info[index]["y"]+(vy_old+object_vy)/2*self.dt
-					
+					#{{{ dx, dy added
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
+					#}}}					
+
 					if object_x < object_w//2 + 10:
 						object_x = object_w//2 + 10
 						object_vx = -object_vx
