@@ -108,8 +108,8 @@ class Dataset:
 		self.a[index,:,:,:] = 0
 		self.p[index,:,:,:] = 0
 		if self.forcing:
-			self.X[index, :] = torch.randint(0, self.w, (self.n_forcing,))
-			self.Y[index, :] = torch.randint(0, self.h, (self.n_forcing,))
+			self.X[index, :] = torch.randperm(self.w)[:self.n_forcing]
+			self.Y[index, :] = torch.randperm(self.h)[:self.n_forcing]
 			self.v_obs[index,:,:,:] = 0
 		if self.init_rho is not None:
 			self.rho[index,:,:,:] = self.init_rho
