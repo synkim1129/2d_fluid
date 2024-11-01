@@ -24,7 +24,7 @@ tell(a,p): tell results for a(t+1),p(t+1) of batch
 
 
 class Dataset:
-	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"], forcing=False, n_forcing=0):
+	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"], forcing=False, n_forcing=0, forcing_type='lattice'):
 		"""
 		create dataset
 		:w: width of domains
@@ -91,6 +91,9 @@ class Dataset:
 			self.Y = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.v_obs = torch.zeros(dataset_size, 2, h, w)
 			self.n_forcing = n_forcing
+			self.forcing_type = forcing_type
+			if self.forcing_type == 'random':
+				self.obs_positions = torch.zeros(dataset_size, n_forcing, 2)
 		
 		for i in range(dataset_size):
 			self.reset_env(i)
@@ -108,9 +111,21 @@ class Dataset:
 		self.a[index,:,:,:] = 0
 		self.p[index,:,:,:] = 0
 		if self.forcing:
-			self.X[index, :] = torch.randperm(self.w)[:self.n_forcing]
-			self.Y[index, :] = torch.randperm(self.h)[:self.n_forcing]
-			self.v_obs[index,:,:,:] = 0
+			if self.forcing_type == 'lattice':
+				self.X[index, :] = torch.randperm(self.w)[:self.n_forcing]
+				self.Y[index, :] = torch.randperm(self.h)[:self.n_forcing]
+				self.v_obs[index,:,:,:] = 0
+			elif self.forcing_type == 'mid_lattice':
+				self.X[index, :] = torch.randint(0, self.w - 1, (self.n_forcing,))
+				self.Y[index, :] = torch.randint(0, self.h - 1, (self.n_forcing,))
+				self.v_obs[index,:,:,:] = 0
+			elif self.forcing_type == 'random':
+				self.X[index, :] = torch.randint(0, self.w - 1, (self.n_forcing,))
+				self.Y[index, :] = torch.randint(0, self.h - 1, (self.n_forcing,))
+				self.v_obs[index,:,:,:] = 0
+				self.obs_positions[index, :, 0] = torch.rand(self.n_forcing)
+				self.obs_positions[index, :, 1] = torch.rand(self.n_forcing)
+				
 		if self.init_rho is not None:
 			self.rho[index,:,:,:] = self.init_rho
 		
@@ -691,7 +706,10 @@ class Dataset:
 		if self.init_rho is not None:
 			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices],self.rho[self.indices]
 		if self.forcing:
-			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices]
+			if self.forcing_type in ["lattice", "mid_lattice"]:
+				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices]
+			elif self.forcing_type == "random":
+				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices], self.obs_positions[self.indices]
 		return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices]
 
 	def tell(self,a,p,rho=None, v_obs=None):

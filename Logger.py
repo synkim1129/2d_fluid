@@ -167,7 +167,7 @@ class Logger():
 		with open(path,"wb") as f:
 			pickle.dump(dic,f)
 	
-	def load_state(self,model,optimizer,datetime=None,index=None,continue_datetime=False):
+	def load_state(self,model,optimizer,datetime=None,index=None,continue_datetime=False,direct_path=None):
 		"""
 		loads state of model and optimizer
 		:model: model to load (if list: load multiple models)
@@ -177,6 +177,20 @@ class Logger():
 		:continue_datetime: flag whether to continue on this run. Default: False
 		:return: datetime, index (helpful, if datetime / index wasn't given)
 		"""
+		if direct_path is not None:
+			path = direct_path
+			state = torch.load(path)
+			if type(model) is not list:
+				model = [model]
+			for i,m in enumerate(model):
+				m.load_state_dict(state['model{}'.format(i)])
+			if optimizer is not None:
+				if type(optimizer)is not list:
+					optimizer = [optimizer]
+				for i,o in enumerate(optimizer):
+					o.load_state_dict(state['optimizer{}'.format(i)])
+			return None, None
+
 		if datetime is None:
 			for _,dirs,_ in os.walk('Logger/{}/'.format(self.name)):
 				datetime = sorted(dirs)[-1]
