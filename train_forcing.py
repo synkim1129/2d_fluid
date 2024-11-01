@@ -24,7 +24,6 @@ from derivatives import vector2HSV, rot_mac
 from setups import Dataset
 from Logger import Logger, t_step
 from pde_cnn import get_Net
-import cv2
 from get_param import get_hyperparam
 import pdb
 
@@ -70,7 +69,41 @@ if params.load_latest or params.load_date_time is not None or params.load_index 
 params.load_index = 0 if params.load_index is None else params.load_index
 
 # initialize Dataset
-dataset = Dataset(params.width,params.height,params.batch_size,params.dataset_size,params.average_sequence_length,max_speed=params.max_speed,dt=params.dt,forcing=True, n_forcing=params.n_forcing)
+dataset = Dataset(params.width,params.height,params.batch_size,params.dataset_size,params.average_sequence_length,max_speed=params.max_speed,dt=params.dt,forcing=True,n_forcing=params.n_forcing,forcing_type=params.forcing_type)
+
+def bilinear_interpolation_mid(v1, v2, v3, v4):
+    """
+    a = 0.5, b = 0.5로 고정된 양선형 보간 함수.
+    
+    v1, v2, v3, v4: (N, D) 모양의 벡터 집합 텐서
+                    N은 점의 개수, D는 벡터의 차원
+    """
+    # 각 벡터에 동일한 가중치(1/4)를 부여하여 보간
+    v = 0.25 * (v1 + v2 + v3 + v4)
+    return v
+
+
+def bilinear_interpolation_rand(a, b, v1, v2, v3, v4):
+    """
+    여러 점에 대해 양선형 보간을 수행하는 함수.
+    
+    a, b: (N,) 모양의 좌표 텐서 (0 <= a, b < 1)
+    v1, v2, v3, v4: (N, D) 모양의 벡터 집합 텐서
+                    N은 점의 개수, D는 벡터의 차원
+    """
+    # a, b의 모양을 (N, 1)로 변환하여 브로드캐스팅 가능하도록 만듭니다.
+    a = a.unsqueeze(1)  # (N, 1)
+    b = b.unsqueeze(1)  # (N, 1)
+
+    # x축 보간
+    vA = (1 - a) * v1 + a * v2  # (N, D)
+    vB = (1 - a) * v3 + a * v4  # (N, D)
+
+    # y축 보간
+    v = (1 - b) * vA + b * vB  # (N, D)
+
+    return v
+
 
 def loss_function(x):
 	return torch.pow(x, 2)
@@ -79,7 +112,10 @@ def loss_function(x):
 for epoch in range(params.load_index, params.n_epochs):
 
 	for i in range(params.n_batches_per_epoch):
-		v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs = toCuda(dataset.ask())
+		if params.forcing_type in ["lattice", "mid_lattice"]:
+			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs = toCuda(dataset.ask())
+		elif params.forcing_type == "random":
+			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs, obs_positions = toCuda(dataset.ask())
 
 		# convert v_cond,cond_mask,flow_mask to MAC grid
 		v_cond = normal2staggered(v_cond)
@@ -94,10 +130,27 @@ for epoch in range(params.load_index, params.n_epochs):
 
 		# predict new fluid state using pretrained model
 		with torch.no_grad():
+			
 			a_pre_new, _ = pretrained_model(a_old, p_old, flow_mask, v_cond, cond_mask)
 			batch_indices = torch.arange(params.batch_size, dtype=torch.int64)[:, None]
-			index_obs = (batch_indices, slice(None), Y_obs, X_obs)
-			v_obs[index_obs] = rot_mac(a_pre_new)[index_obs]
+			if params.forcing_type == 'lattice':
+				index_obs = (batch_indices, slice(None), Y_obs, X_obs)
+				v_obs[index_obs] = rot_mac(a_pre_new)[index_obs]
+			elif params.forcing_type == 'mid_lattice':
+				index_obs_1 = (batch_indices, slice(None), Y_obs, X_obs)
+				index_obs_2 = (batch_indices, slice(None), Y_obs, X_obs + 1)
+				index_obs_3 = (batch_indices, slice(None), Y_obs + 1, X_obs)
+				index_obs_4 = (batch_indices, slice(None), Y_obs + 1, X_obs + 1)
+				v_obs[index_obs_1] = bilinear_interpolation_mid(rot_mac(a_pre_new)[index_obs_1], rot_mac(a_pre_new)[index_obs_2], rot_mac(a_pre_new)[index_obs_3], rot_mac(a_pre_new)[index_obs_4])
+			elif params.forcing_type == 'random':
+				index_obs_1 = (batch_indices, slice(None), Y_obs, X_obs)
+				index_obs_2 = (batch_indices, slice(None), Y_obs, X_obs + 1)
+				index_obs_3 = (batch_indices, slice(None), Y_obs + 1, X_obs)
+				index_obs_4 = (batch_indices, slice(None), Y_obs + 1, X_obs + 1)
+				X_obs_position = obs_positions[:,:,0]
+				Y_obs_position = obs_positions[:,:,1]
+				v_obs[index_obs_1] = bilinear_interpolation_rand(X_obs_position, Y_obs_position, rot_mac(a_pre_new)[index_obs_1], rot_mac(a_pre_new)[index_obs_2], rot_mac(a_pre_new)[index_obs_3], rot_mac(a_pre_new)[index_obs_4])
+    
 
 		# compute boundary loss
 		loss_bound = torch.mean(loss_function(cond_mask_mac * (v_new - v_cond))[:, :, 1:-1, 1:-1],dim=(1, 2, 3))
@@ -121,10 +174,25 @@ for epoch in range(params.load_index, params.n_epochs):
 		loss_mean_p = torch.mean(p_new,dim=(1,2,3))**2
 
 		# additional loss for the difference between v_new and v_obs at point (X, Y)
-		selected_v_new = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
 		selected_v_obs = v_obs[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
 		selected_flow_mask = flow_mask[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
-		loss_diff = torch.sum(((selected_v_new - selected_v_obs) ** 2) * selected_flow_mask, dim=(1, 2, 3))
+
+
+		if params.forcing_type == 'lattice':
+			selected_v_new = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+			loss_diff = torch.sum(((selected_v_new - selected_v_obs) ** 2) * selected_flow_mask, dim=(1, 2, 3))
+		elif params.forcing_type == 'mid_lattice':
+			selected_v_new_1 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+			selected_v_new_2 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1) + 1, X_obs.unsqueeze(1)]
+			selected_v_new_3 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1) + 1]
+			selected_v_new_4 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1) + 1, X_obs.unsqueeze(1) + 1]
+			loss_diff = torch.sum((bilinear_interpolation_mid(selected_v_new_1, selected_v_new_2, selected_v_new_3, selected_v_new_4) - selected_v_obs) ** 2 * selected_flow_mask, dim=(1, 2, 3))
+		elif params.forcing_type == 'random':
+			selected_v_new_1 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1)]
+			selected_v_new_2 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1), X_obs.unsqueeze(1) + 1]
+			selected_v_new_3 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1) + 1, X_obs.unsqueeze(1)]
+			selected_v_new_4 = v_new[torch.arange(params.batch_size).unsqueeze(1).unsqueeze(2), :, Y_obs.unsqueeze(1) + 1, X_obs.unsqueeze(1) + 1]
+			loss_diff = torch.sum((bilinear_interpolation_rand(obs_positions[:,:, 0], obs_positions[:,:, 1], selected_v_new_1, selected_v_new_2, selected_v_new_3, selected_v_new_4) - selected_v_obs) ** 2 * selected_flow_mask, dim=(1, 2, 3))
 		
 		loss = (
 			params.loss_bound * loss_bound

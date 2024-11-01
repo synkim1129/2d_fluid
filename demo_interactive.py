@@ -22,7 +22,7 @@ rho = params.rho
 dt = params.dt
 w,h = params.width,params.height
 n_time_steps=params.average_sequence_length
-save_movie=False#True#
+save_movie=True#True#
 
 # load fluid model:
 logger = Logger(get_param.get_hyperparam(params),use_csv=False,use_tensorboard=False)
@@ -43,7 +43,7 @@ cv2.namedWindow('v',cv2.WINDOW_NORMAL)
 cv2.namedWindow('a',cv2.WINDOW_NORMAL)
 
 if save_movie:
-	fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+	fourcc = cv2.VideoWriter_fourcc(*'DIVX')
 	movie_p = cv2.VideoWriter(f'plots/p_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w,  h))
 	movie_v = cv2.VideoWriter(f'plots/v_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w-3,  h-3))
 	movie_a = cv2.VideoWriter(f'plots/a_{get_param.get_hyperparam(params)}.avi', fourcc, 20.0, (w,  h))
@@ -67,7 +67,7 @@ with torch.no_grad():
 		# types to choose from: magnus, box, pipe, image
 		# images to choose from: fish, cyber, smiley, wing
 		# backgrounds to choose from: empty, cave1, cave2
-		dataset = Dataset(w,h,1,1,interactive=True,average_sequence_length=n_time_steps,max_speed=params.max_speed,dt=dt,types=["magnus","image"],images=["fish","cyber","smiley","wing"],background_images=["empty"])
+		dataset = Dataset(w,h,1,1,interactive=True,average_sequence_length=n_time_steps,max_speed=params.max_speed,dt=dt,types=["box"],images=["fish","cyber","smiley","wing"],background_images=["empty"])
 		
 		FPS_Counter=0
 		last_time = time.time()

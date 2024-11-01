@@ -30,6 +30,7 @@ def params():
 	parser.add_argument('--dataset_size', default=1000, type=int, help='size of dataset (default: 1000)')
 	parser.add_argument('--cuda', default=True, type=str2bool, help='use GPU')
 	parser.add_argument('--n_forcing', default=1, type=int, help='number of forcing terms (default: 1)')
+	parser.add_argument('--forcing_type', default='lattice', type=str, help='type of choosing forcing points (default: lattice)', choices=['lattice','mid_lattice','random'])
 	parser.add_argument('--loss_bound', default=20, type=float, help='loss factor for boundary conditions')
 	parser.add_argument('--loss_cont', default=0, type=float, help='loss factor for continuity equation')
 	parser.add_argument('--loss_diff', default=10, type=float, help='loss factor for difference between predicted and pretrained model')
