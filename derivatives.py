@@ -42,7 +42,7 @@ def dy_top(v):
 
 dy_bottom_kernel = toCuda(torch.Tensor([0,-1,1]).unsqueeze(0).unsqueeze(1).unsqueeze(3))
 def dy_bottom(v):
-	return F.conv2d(v,dy_bottom_kernel,padding=(1,0)) / params.dx
+	return F.conv2d(v,dy_bottom_kernel,padding=(1,0)) / params.dy
 
 # Curl operator
 
@@ -55,7 +55,7 @@ def rot_mac(a):
 #laplace_kernel = toCuda(torch.Tensor([[1,1,1],[1,-8,1],[1,1,1]]).unsqueeze(0).unsqueeze(1)) # 9 point stencil
 laplace_kernel = toCuda(0.25*torch.Tensor([[1,2,1],[2,-12,2],[1,2,1]]).unsqueeze(0).unsqueeze(1)) # isotropic 9 point stencil
 def laplace(v):
-	return F.conv2d(v,laplace_kernel,padding=(1,1)) / (params.dx**2)
+	return F.conv2d(v,laplace_kernel,padding=(1,1))/(params.dx * params.dx)
 
 
 # mapping operators

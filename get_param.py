@@ -31,9 +31,11 @@ def params():
 	parser.add_argument('--cuda', default=True, type=str2bool, help='use GPU')
 	parser.add_argument('--loss_bound', default=20, type=float, help='loss factor for boundary conditions')
 	parser.add_argument('--loss_cont', default=0, type=float, help='loss factor for continuity equation')
+	parser.add_argument('--loss_momentum', default=1, type=float, help='loss factor for navier stokes equations')
+	parser.add_argument('--loss_mass', default=1, type=float, help='loss factor for navier stokes equations')
 	parser.add_argument('--loss_rho', default=10, type=float, help='loss factor for keeping rho fixed')
-	parser.add_argument('--loss_mean_a', default=0, type=float, help='loss factor to keep mean of a around 0')
-	parser.add_argument('--loss_mean_p', default=0, type=float, help='loss factor to keep mean of p around 0')
+	parser.add_argument('--loss_mean_v', default=0, type=float, help='loss factor to keep mean of a around 0')
+	parser.add_argument('--loss_mean_H', default=0, type=float, help='loss factor to keep mean of p around 0')
 	parser.add_argument('--regularize_grad_p', default=0, type=float, help='regularizer for gradient of p. evt needed for very high reynolds numbers (default: 0)')
 	parser.add_argument('--max_speed', default=1, type=float, help='max speed for boundary conditions in dataset (default: 1)')
 	parser.add_argument('--lr', default=0.001, type=float, help='learning rate of optimizer (default: 0.001)')
@@ -64,16 +66,12 @@ def params():
 	parser.add_argument('--load_index', default=None, type=int, help='index of run to load (default: None)')
 	parser.add_argument('--load_optimizer', default=False, type=str2bool, help='load state of optimizer (default: True)')
 	parser.add_argument('--load_latest', default=False, type=str2bool, help='load latest version for training (if True: leave load_date_time and load_index None. default: False)')
-	
-	#added SW
-	parser.add_argument('--loss_momentum', default=1, type=float, help='loss factor for navier stokes equations')
-	parser.add_argument('--loss_mass', default=20, type=float, help='loss factor for navier stokes equations')
-	parser.add_argument('--loss_mean_H', default=1, type=float, help='loss factor to keep mean of p around 0')
 
-	parser.add_argument('--dx',     default=100e3,  type=float, help='x inteval')
-	parser.add_argument('--dy',     default=100e3,  type=float, help='y inerval')
+	#added dx, dy, init_H
 
-	parser.add_argument('--mean_H', default=1e3, type=float, help='mean deapth')
+	parser.add_argument('--dx',     default=1,  type=float, help='x inteval')
+	parser.add_argument('--dy',     default=1,  type=float, help='y inerval')
+	parser.add_argument('--mean_H', default=10, type=float, help='mean deapth')
 
 	# parse parameters
 	params = parser.parse_args()

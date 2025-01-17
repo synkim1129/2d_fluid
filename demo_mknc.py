@@ -12,6 +12,7 @@ import math
 import numpy as np
 import time
 import os
+from netCDF4 import Dataset as datas
 
 torch.manual_seed(1)
 torch.set_num_threads(4)
@@ -54,6 +55,31 @@ cv2.setMouseCallback("H",mousePosition)
 FPS = 0
 quit = False
 
+outf = datas("test.nc",mode="w",format="NETCDF4")
+
+tdim = outf.createDimension("time",None)
+to   = outf.createVariable("time",np.int32,("time",))
+to.long_name = "time"
+
+ydim = outf.createDimension("y",h)
+yo   = outf.createVariable("y",np.int32,("y",))
+yo.long_name = "y_grid"
+yo[:] = np.arange(h)*params.dy
+
+xdim = outf.createDimension("x",w)
+xo   = outf.createVariable("x",np.int32,("x",))
+xo.long_name = "x_grid"
+xo[:] = np.arange(w)*params.dx
+
+Ho = outf.createVariable("H",np.float32,("time","y","x",))
+Ho.long_name = "total_depth"
+
+vo = outf.createVariable("v",np.float32,("time","y","x",))
+vo.long_name = "y_direction_speed"
+
+uo = outf.createVariable("u",np.float32,("time","y","x",))
+uo.long_name = "x_direction_speed"
+
 with torch.no_grad():
 	while True:
 		# create new environmet:
@@ -61,7 +87,7 @@ with torch.no_grad():
 		# images to choose from: fish, cyber, smiley, wing
 		# backgrounds to choose from: empty, cave1, cave2
 		dataset = Dataset(w,h,1,1,interactive=True,average_sequence_length=n_time_steps,max_speed=params.max_speed,dt=dt,\
-                          types=["image","pipe"],images=["fish","cyber","smiley","wing"],background_images=["empty"])
+                          types=["pipe","image","test_wave"],images=["fish","cyber","smiley","wing"],background_images=["empty"])
 		
 		FPS_Counter=0
 		last_time = time.time()
@@ -78,8 +104,12 @@ with torch.no_grad():
 			# MOST IMPORTANT PART: apply fluid model to advace fluid state
 			v_new,H_new = fluid_model(v_old,H_old,flow_mask,v_cond,cond_mask)
 
-			v_new = (v_new-torch.mean(v_new,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))
-			H_new = (H_new-torch.mean(H_new,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))
+			uo[t,:,:] = v_new[0,1,:,:].cpu().numpy()
+			vo[t,:,:] = v_new[0,0,:,:].cpu().numpy()
+			Ho[t,:,:] = H_new[0,0,:,:].cpu().numpy()
+
+			#v_new = (v_new-torch.mean(v_new,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))
+			#H_new = (H_new-torch.mean(H_new,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))
 	
 			if t%1==0: # print out results only at every 10th iteration
 				print(f"t:{t} (FPS: {FPS})")

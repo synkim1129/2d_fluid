@@ -27,24 +27,7 @@ tell(a,p): tell results for a(t+1),p(t+1) of batch
 
 
 class Dataset:
-	def __init__(self,\
-                 w,\
-                 h,\
-                 batch_size              = 100,\
-                 dataset_size            = 1000,\
-                 average_sequence_length = 5000,\
-                 interactive             = False,\
-                 max_speed               = 3,\
-                 mean_H                  = params.mean_H,\
-                 brown_damping           = 0.9995,\
-                 brown_velocity          = 0.005,\
-                 init_velocity           = 0,\
-                 init_rho                = None,\
-                 n_cond                  = False,\
-                 dt                      = 1,\
-                 types                   = ["magnus","box","pipe"],\
-                 images                  = ["cyber","fish","smiley","wing"],\
-                 background_images       = ["empty"]):
+	def __init__(self,w,h,batch_size=100,dataset_size=1000,average_sequence_length=5000,interactive=False,max_speed=3,brown_damping=0.9995,brown_velocity=0.005,init_velocity=0,init_rho=None,n_cond=False,dx=params.dx,dy=params.dy,mean_H=params.mean_H,dt=1,types=["magnus","box","pipe"],images=["cyber","fish","smiley","wing"],background_images=["empty"]):
 		"""
 		create dataset
 		:w: width of domains
@@ -76,11 +59,10 @@ class Dataset:
 		self.dataset_size = dataset_size
 		self.average_sequence_length = average_sequence_length
 
-		#add SW
+		# added
 		self.eta_b = torch.zeros(dataset_size,1,h,w)
 		self.v     = torch.zeros(dataset_size,2,h,w)
 		self.H     = torch.zeros(dataset_size,1,h,w)
-		self.mean_H = mean_H
 
 		self.v_cond = torch.zeros(dataset_size,2,h,w)# one could also think about p_cond... -> neumann
 		self.cond_mask = torch.zeros(dataset_size,1,h,w)
@@ -115,13 +97,17 @@ class Dataset:
 		self.t = 0
 		self.i = 0
 	
+		# added 
+		self.dx = dx
+		self.dy = dy
+		self.mean_H = mean_H
+
 	def reset_env(self,index):
 		"""
 		reset environemt[index] to a new, randomly chosen domain
 		a and p are set to 0, so the model has to learn "cold-starts"
 		"""
 
-		#added
 		self.eta_b[index,:,:,:] = 0
 		self.v[index,:,:,:] = 0
 		self.H[index,:,:,:] = params.mean_H
@@ -134,13 +120,35 @@ class Dataset:
 		self.cond_mask[index,:,(self.h-3):self.h,:]=1
 		self.cond_mask[index,:,:,0:5]=1
 		self.cond_mask[index,:,:,(self.w-5):self.w]=1
-
+		
 		if self.n_cond:
 			self.n_cond_mask[index,:,:,:]=0
 		
 		type = np.random.choice(self.types)
 
-#{{{types
+		if type == "test_wave": #gaussian H middle of domain
+
+			flow_v = 0
+			
+			x = np.linspace(-15,15,self.w)
+			y = np.linspace(-5,5,self.h)
+
+			X,Y = np.meshgrid(x,y) 
+
+			H_X = (params.mean_H/1e3)*np.exp(-(X**2))
+			H_Y = (params.mean_H/1e3)*np.exp(-(Y**2))
+
+			H_init = H_X * H_Y
+
+			#H_init = torch.from_numpy(np.broadcast_to(H_init,(self.dataset_size,1,self.h,self.w)))
+
+			self.H = self.H + H_init
+
+			self.H = self.H.type(torch.FloatTensor)
+
+			self.env_info[index]["type"] = type
+			self.env_info[index]["H"] = self.H
+			self.env_info[index]["flow_v"] = flow_v
 
 		if type == "magnus": # magnus effekt (1)
 			flow_v = self.max_speed*(np.random.rand()-0.5)*2 #flow velocity (1.5) (before: 3*(np.random.rand()-0.5)*2)
@@ -342,21 +350,17 @@ class Dataset:
 			self.mousex = object_x
 			self.mousey = object_y
 			self.mousev = flow_v
-
-#}}}
 		
 		self.flow_mask[index,:,:,:] = 1-self.cond_mask[index,:,:,:]
 		if self.n_cond:
 			self.flow_mask[index,:,:,:] = self.flow_mask[index,:,:,:]*(1-self.n_cond_mask[index,:,:,:])
-
-#{{{update_env
 	
 	def update_envs(self,indices):
 		"""
 		update boundary conditions of environments[indices]
 		"""
 		for index in indices:
-			
+
 			if self.env_info[index]["type"] == "magnus":
 				object_r = self.env_info[index]["r"]
 				vx_old = self.env_info[index]["vx"]
@@ -368,8 +372,8 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_r + 10:
 						object_x = object_r + 10
@@ -391,8 +395,8 @@ class Dataset:
 					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_r + 10:
 						object_x = object_r + 10
@@ -450,8 +454,8 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_r + self.padding_x + 1:
 						object_x = object_r + self.padding_x + 1
@@ -473,8 +477,8 @@ class Dataset:
 					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_r + self.padding_x + 1:
 						object_x = object_r + self.padding_x + 1
@@ -540,8 +544,8 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_w + 10:
 						object_x = object_w + 10
@@ -562,8 +566,8 @@ class Dataset:
 					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_w + 10:
 						object_x = object_w + 10
@@ -622,8 +626,8 @@ class Dataset:
 					object_vx = vx_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					object_vy = vy_old*self.brown_damping + self.brown_velocity*np.random.randn()
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_w//2 + 10:
 						object_x = object_w//2 + 10
@@ -644,8 +648,8 @@ class Dataset:
 					object_vx = max(min((self.mousex-self.env_info[index]["x"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					object_vy = max(min((self.mousey-self.env_info[index]["y"])/self.interactive_spring,self.max_speed),-self.max_speed)
 					
-					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/params.dx
-					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/params.dy
+					object_x = self.env_info[index]["x"]+((vx_old+object_vx)/2*self.dt)/self.dx
+					object_y = self.env_info[index]["y"]+((vy_old+object_vy)/2*self.dt)/self.dy
 					
 					if object_x < object_w//2 + 10:
 						object_x = object_w//2 + 10
@@ -692,7 +696,7 @@ class Dataset:
 			if self.n_cond:
 				self.cond_mask[index,:,:,:] = self.cond_mask[index,:,:,:]*(1-self.n_cond_mask[index,:,:,:])
 				self.flow_mask[index,:,:,:] = self.flow_mask[index,:,:,:]*(1-self.n_cond_mask[index,:,:,:])
-#}}}			
+				
 	
 	def ask(self):
 		"""
@@ -706,12 +710,12 @@ class Dataset:
 		self.indices = np.random.choice(self.dataset_size,self.batch_size)
 		self.update_envs(self.indices)
 		if self.n_cond and self.init_rho is not None:
-			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.v[self.indices],self.eta_b[self.indices],self.H[self.indices],self.rho[self.indices],self.n_cond_mask[self.indices]
+			return self.v_cond[self.indices], self.cond_mask[self.indices], self.flow_mask[self.indices], self.v[self.indices], self.eta_b[self.indices], self.H[self.indices], self.rho[self.indices], self.n_cond_mask[self.indices]
 		if self.n_cond:
-			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.v[self.indices],self.eta_b[self.indices],self.H[self.indices],self.n_cond_mask[self.indices]
+			return self.v_cond[self.indices], self.cond_mask[self.indices], self.flow_mask[self.indices], self.v[self.indices], self.eta_b[self.indices], self.H[self.indices], self.n_cond_mask[self.indices]
 		if self.init_rho is not None:
-			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.v[self.indices],self.eta_b[self.indices],self.H[self.indices],self.rho[self.indices]
-		return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.v[self.indices],self.eta_b[self.indices],self.H[self.indices]
+			return self.v_cond[self.indices], self.cond_mask[self.indices], self.flow_mask[self.indices], self.v[self.indices], self.eta_b[self.indices], self.H[self.indices], self.rho[self.indices]
+		return self.v_cond[self.indices], self.cond_mask[self.indices], self.flow_mask[self.indices], self.v[self.indices], self.eta_b[self.indices], self.H[self.indices]
 	
 	def tell(self,v,H,rho=None):
 		"""

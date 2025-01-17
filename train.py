@@ -21,10 +21,6 @@ mu = params.mu
 rho = params.rho
 dt = params.dt
 
-h = params.height
-w = params.width
-
-#added 
 g = 9.8
 
 # initialize fluid model
@@ -68,12 +64,7 @@ for epoch in range(params.load_index,params.n_epochs):
 		
 		# compute boundary loss
 		loss_bound = torch.mean(loss_function(cond_mask_mac*(v_new-v_cond))[:,:,1:-1,1:-1],dim=(1,2,3))
-	
-		H_bound_l = torch.mean(loss_function(H_new[:,:,:,5] - H_old[:,:,:,6]),dim=(1,2))
-		H_bound_r = torch.mean(loss_function(H_new[:,:,:,w-5] - H_old[:,:,:,w-6]),dim=(1,2))
-
-		loss_H_bound = H_bound_l + H_bound_r
-
+		
 		# explicit / implicit / IMEX integration schemes
 		if params.integrator == "explicit":
 			v = v_old
@@ -83,19 +74,18 @@ for epoch in range(params.load_index,params.n_epochs):
 			v = (v_new+v_old)/2
 		
 		# compute loss for momentum equation
-
-#{{{derivatives
+		#{{{ derivatives 
 
 		eta = eta_b + H_new
 
 		dudt    = (v_new[:,1:2] - v_old[:,1:2]) / dt
 		ududx   = v[:,1:2] * dx(v[:,1:2])
-		vdudy   = 0.5 * (map_vy2vx_top(v[:,0:1]) * dy_top(v[:,1:2]) +\
-                         map_vy2vx_bottom(v[:,0:1]) * dy_bottom(v[:,1:2]))
+		vdudy   = 0.5 * (map_vy2vx_top(v[:,0:1]) * dy_top(v[:,1:2]) + \
+                  map_vy2vx_bottom(v[:,0:1]) * dy_bottom(v[:,1:2]))
 
 		dvdt    = (v_new[:,0:1] - v_old[:,0:1]) / dt
-		udvdx   = 0.5 * (map_vx2vy_left(v[:,1:2]) * dx_left(v[:,0:1]) +\
-                         map_vx2vy_right(v[:,1:2]) * dx_right(v[:,0:1]))
+		udvdx   = 0.5 * (map_vx2vy_left(v[:,1:2]) * dx_left(v[:,0:1]) + \
+                  map_vx2vy_right(v[:,1:2]) * dx_right(v[:,0:1]))
 		vdvdy   = v[:,0:1] * dy(v[:,0:1])
 
 		detadx   = dx(eta)
@@ -116,29 +106,27 @@ for epoch in range(params.load_index,params.n_epochs):
 
 		Hdudx  = H_new * dx(v[:,1:2])
 		Hdvdy  = H_new * dy(v[:,0:1])
+		#}}}
 
-#}}}
-
-		loss_momentum =  torch.mean(loss_function(flow_mask_mac[:,1:2]*(\
-                         dudt + ududx +vdudy + g*detadx - (mu/rho)*udel2\
-                         ))[:,:,1:-1,1:-1],dim=(1,2,3)) +\
-                         torch.mean(loss_function(flow_mask_mac[:,0:1]*(\
-                         dvdt + udvdx +vdvdy + g*detady - (mu/rho)*vdel2\
+		loss_momentum =  torch.mean(loss_function(flow_mask_mac[:,1:2]*( \
+                         dudt + ududx +vdudy + g*detadx - (mu/rho)*udel2 \
+                         ))[:,:,1:-1,1:-1],dim=(1,2,3)) + \
+                         torch.mean(loss_function(flow_mask_mac[:,0:1]*( \
+                         dvdt + udvdx +vdvdy + g*detady - (mu/rho)*vdel2 \
                          ))[:,:,1:-1,1:-1],dim=(1,2,3))
 
-		loss_mass     =  torch.mean(loss_function(\
-                         dHdt + udHdx + vdHdy + Hdudx + Hdvdy\
+		loss_mass     =  torch.mean(loss_function( \
+                         dHdt + udHdx + vdHdy + Hdudx + Hdvdy \
                          )[:,:,1:-1,1:-1],dim=(1,2,3))
-		
+
 		# optional: additional loss to keep mean of a / p close to 0
 		loss_mean_H = ( torch.mean(H_new,dim=(1,2,3)) - params.mean_H )**2
-
-		loss = params.loss_bound*loss_bound +\
-               params.loss_bound*loss_H_bound +\
-               params.loss_momentum*loss_momentum +\
-               params.loss_mass*loss_mass +\
-               0*loss_mean_H
-
+		
+		loss = params.loss_bound*loss_bound + \
+               params.loss_momentum*loss_momentum + \
+               params.loss_mass*loss_mass + \
+               params.loss_mean_H*loss_mean_H
+		
 		loss = torch.mean(torch.log(loss))
 		
 		# compute gradients
@@ -155,8 +143,8 @@ for epoch in range(params.load_index,params.n_epochs):
 		# perform optimization step
 		optimizer.step()
 		
-		#v_new.data = (v_new.data-torch.mean(v_new.data,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))#normalize pressure
-		#H_new.data = (H_new.data-torch.mean(H_new.data,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3))#normalize a
+		v_new.data = (v_new.data-torch.mean(v_new.data,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3)) #normalize u, v
+		H_new.data = (H_new.data-torch.mean(H_new.data,dim=(1,2,3)).unsqueeze(1).unsqueeze(2).unsqueeze(3)) #normalize H
 		
 		# recycle data to improve fluid state statistics in dataset
 		dataset.tell(toCpu(v_new),toCpu(H_new))
@@ -165,18 +153,16 @@ for epoch in range(params.load_index,params.n_epochs):
 		if i%10 == 0:
 			loss          = toCpu(loss).numpy()
 			loss_bound    = toCpu(torch.mean(loss_bound)).numpy()
-			loss_H_bound  = toCpu(torch.mean(loss_H_bound)).numpy()
 			loss_momentum = toCpu(torch.mean(loss_momentum)).numpy()
 			loss_mass     = toCpu(torch.mean(loss_mass)).numpy()
 			logger.log(f"loss_{params.loss}",loss,epoch*params.n_batches_per_epoch+i)
 			logger.log(f"loss_bound_{params.loss}",loss_bound,epoch*params.n_batches_per_epoch+i)
-			logger.log(f"loss_H_bound_{params.loss}",loss_H_bound,epoch*params.n_batches_per_epoch+i)
 			logger.log(f"loss_momentum_{params.loss}",loss_momentum,epoch*params.n_batches_per_epoch+i)
 			logger.log(f"loss_mass_{params.loss}",loss_mass,epoch*params.n_batches_per_epoch+i)
-			
-			if i%100 == 0:
-				print(f"{epoch}: i:{i}: loss: {loss}; loss_bound: {loss_bound}; loss_H_bound: {loss_H_bound}; loss_momentum: {loss_momentum}; loss_mass: {loss_mass};")
-	
+
+			if i%1 == 0:
+				print(f"{epoch}: i:{i}: loss: {loss}; loss_bound: {loss_bound}; loss_momentum: {loss_momentum}; loss_mass: {loss_mass};")
+
 	# safe state after every epoch
 	if params.log:
 		logger.save_state(fluid_model,optimizer,epoch+1)
