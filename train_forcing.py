@@ -113,9 +113,9 @@ for epoch in range(params.load_index, params.n_epochs):
 
 	for i in range(params.n_batches_per_epoch):
 		if params.forcing_type in ["lattice", "mid_lattice"]:
-			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs = toCuda(dataset.ask())
+			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs, obs_mask = toCuda(dataset.ask())
 		elif params.forcing_type == "random":
-			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs, obs_positions = toCuda(dataset.ask())
+			v_cond, cond_mask, flow_mask, a_old, p_old, X_obs, Y_obs, v_obs, obs_positions, obs_mask = toCuda(dataset.ask())
 
 		# convert v_cond,cond_mask,flow_mask to MAC grid
 		v_cond = normal2staggered(v_cond)
@@ -125,7 +125,7 @@ for epoch in range(params.load_index, params.n_epochs):
 		v_old = rot_mac(a_old)
 
 		# predict new fluid state from old fluid state and boundary conditions using the neural fluid model
-		a_new, p_new = fluid_model(a_old, p_old, flow_mask, v_cond, cond_mask, v_obs)
+		a_new, p_new = fluid_model(a_old, p_old, flow_mask, v_cond, cond_mask, v_obs, obs_mask)
 		v_new = rot_mac(a_new)
 
 		# predict new fluid state using pretrained model
