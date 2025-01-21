@@ -90,6 +90,7 @@ class Dataset:
 			self.X = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.Y = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.v_obs = torch.zeros(dataset_size, 2, h, w)
+			self.obs_mask = torch.zeors(dataset_size, 1, h, w)
 			self.n_forcing = n_forcing
 			self.forcing_type = forcing_type
 			if self.forcing_type == 'random':
@@ -111,20 +112,21 @@ class Dataset:
 		self.a[index,:,:,:] = 0
 		self.p[index,:,:,:] = 0
 		if self.forcing:
+			self.v_obs[index,:,:,:] = 0
+			self.obs_mask[index,:,:,:] = 0
 			if self.forcing_type == 'lattice':
 				self.X[index, :] = torch.randperm(self.w)[:self.n_forcing]
 				self.Y[index, :] = torch.randperm(self.h)[:self.n_forcing]
-				self.v_obs[index,:,:,:] = 0
 			elif self.forcing_type == 'mid_lattice':
 				self.X[index, :] = torch.randint(0, self.w - 1, (self.n_forcing,))
 				self.Y[index, :] = torch.randint(0, self.h - 1, (self.n_forcing,))
-				self.v_obs[index,:,:,:] = 0
 			elif self.forcing_type == 'random':
 				self.X[index, :] = torch.randint(0, self.w - 1, (self.n_forcing,))
 				self.Y[index, :] = torch.randint(0, self.h - 1, (self.n_forcing,))
-				self.v_obs[index,:,:,:] = 0
 				self.obs_positions[index, :, 0] = torch.rand(self.n_forcing)
 				self.obs_positions[index, :, 1] = torch.rand(self.n_forcing)
+			for x, y in zip(self.X[index], self.Y[index]):
+				self.obs_mask[index, :, y, x] = 1
 				
 		if self.init_rho is not None:
 			self.rho[index,:,:,:] = self.init_rho
@@ -707,9 +709,9 @@ class Dataset:
 			return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices],self.rho[self.indices]
 		if self.forcing:
 			if self.forcing_type in ["lattice", "mid_lattice"]:
-				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices]
+				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices], self.obs_mask[self.indices]
 			elif self.forcing_type == "random":
-				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices], self.obs_positions[self.indices]
+				return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices], self.X[self.indices], self.Y[self.indices], self.v_obs[self.indices], self.obs_positions[self.indices], self.obs_mask[self]
 		return self.v_cond[self.indices],self.cond_mask[self.indices],self.flow_mask[self.indices],self.a[self.indices],self.p[self.indices]
 
 	def tell(self,a,p,rho=None, v_obs=None):
