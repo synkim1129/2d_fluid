@@ -90,7 +90,7 @@ class Dataset:
 			self.X = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.Y = torch.zeros(dataset_size, n_forcing, dtype=torch.int64)
 			self.v_obs = torch.zeros(dataset_size, 2, h, w)
-			self.obs_mask = torch.zeors(dataset_size, 1, h, w)
+			self.obs_mask = torch.zeros(dataset_size, 1, h, w)
 			self.n_forcing = n_forcing
 			self.forcing_type = forcing_type
 			if self.forcing_type == 'random':
