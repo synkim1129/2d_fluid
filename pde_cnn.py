@@ -40,12 +40,12 @@ class PDE_UNet1(nn.Module):
 		self.up4 = Up(2*hidden_size, hidden_size, bilinear)
 		self.outc = OutConv(hidden_size, 3)
 
-	def forward(self,a_old,p_old,mask_flow,v_cond,mask_cond,v_obs=None,obs_mask=None):
+	def forward(self,a_old,p_old,mask_flow,v_cond,mask_cond,v_obs=None):
 		v_old = rot_mac(a_old)
 		if not self.forcing:
 			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond],dim=1)
 		else:
-			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond,v_obs,obs_mask],dim=1)
+			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond,v_obs],dim=1)
 		x1 = self.inc(x)
 		x2 = self.down1(x1)
 		x3 = self.down2(x2)
@@ -70,7 +70,7 @@ class PDE_UNet2(nn.Module):
 		if not self.forcing:
 			self.inc = DoubleConv(13, hidden_size)
 		else:
-			self.inc = DoubleConv(16, hidden_size)
+			self.inc = DoubleConv(15, hidden_size)
 		self.down1 = Down(hidden_size, 2*hidden_size)
 		self.down2 = Down(2*hidden_size, 4*hidden_size)
 		self.down3 = Down(4*hidden_size, 8*hidden_size)
@@ -82,12 +82,12 @@ class PDE_UNet2(nn.Module):
 		self.up4 = Up(2*hidden_size, hidden_size, bilinear)
 		self.outc = OutConv(hidden_size, 2)
 
-	def forward(self,a_old,p_old,mask_flow,v_cond,mask_cond,v_obs=None,obs_mask=None):
+	def forward(self,a_old,p_old,mask_flow,v_cond,mask_cond,v_obs=None):
 		v_old = rot_mac(a_old)
 		if not self.forcing:
 			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond],dim=1)
 		else:
-			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond,v_obs,obs_mask],dim=1)
+			x = torch.cat([p_old,a_old,v_old,mask_flow,v_cond*mask_cond,mask_cond,mask_flow*p_old,mask_flow*v_old,v_old*mask_cond,v_obs],dim=1)
 		x1 = self.inc(x)
 		x2 = self.down1(x1)
 		x3 = self.down2(x2)
