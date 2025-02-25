@@ -29,7 +29,9 @@ fluid_model.train()
 optimizer = Adam(fluid_model.parameters(),lr=params.lr)
 
 # initialize Logger and load model / optimizer if according parameters were given
-logger = Logger(get_hyperparam(params),use_csv=False,use_tensorboard=params.log)
+logger = Logger(get_hyperparam(params),datetime=params.load_date_time, use_csv=False,use_tensorboard=params.log)
+logger.save_params_to_file(params)
+
 if params.load_latest or params.load_date_time is not None or params.load_index is not None:
 	load_logger = Logger(get_hyperparam(params),use_csv=False,use_tensorboard=False)
 	if params.load_optimizer:
@@ -47,9 +49,9 @@ def loss_function(x):
 	return torch.pow(x,2)
 
 # training loop
-for epoch in range(params.load_index,params.n_epochs):
+for epoch in range(params.load_index,params.n_epochs): # default: range(0,1000)
 
-	for i in range(params.n_batches_per_epoch):
+	for i in range(params.n_batches_per_epoch): # default: range(5000)
 		v_cond,cond_mask,flow_mask,a_old,p_old = toCuda(dataset.ask())
 		
 		# convert v_cond,cond_mask,flow_mask to MAC grid
@@ -84,7 +86,13 @@ for epoch in range(params.load_index,params.n_epochs):
 		loss_mean_a = torch.mean(a_new,dim=(1,2,3))**2
 		loss_mean_p = torch.mean(p_new,dim=(1,2,3))**2
 		
-		loss = params.loss_bound*loss_bound + params.loss_nav*loss_nav + params.loss_mean_a*loss_mean_a + params.loss_mean_p*loss_mean_p + params.regularize_grad_p*regularize_grad_p
+		loss = (
+			params.loss_bound * loss_bound
+			+ params.loss_nav * loss_nav
+			+ params.loss_mean_a * loss_mean_a
+			+ params.loss_mean_p * loss_mean_p
+			+ params.regularize_grad_p * regularize_grad_p
+		)
 		
 		loss = torch.mean(torch.log(loss))
 		

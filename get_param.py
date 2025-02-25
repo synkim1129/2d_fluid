@@ -19,7 +19,7 @@ def params():
 	parser = argparse.ArgumentParser(description='train / test a pytorch model to predict frames')
 
 	# Training parameters
-	parser.add_argument('--net', default="UNet2", type=str, help='network to train (default: UNet2)', choices=["UNet1","UNet2","UNet3"])
+	parser.add_argument('--net', default="UNet2", type=str, help='network to train (default: UNet2)', choices=["UNet1","UNet2","UNet3", "UNet2_no_tanh"])
 	parser.add_argument('--n_epochs', default=1000, type=int, help='number of epochs (after each epoch, the model gets saved)')
 	parser.add_argument('--n_grad_steps', default=500, type=int, help='number of gradient descent steps')
 	parser.add_argument('--hidden_size', default=20, type=int, help='hidden size of network (default: 20)')
@@ -29,8 +29,11 @@ def params():
 	parser.add_argument('--average_sequence_length', default=5000, type=int, help='average sequence length in dataset (default: 5000)')
 	parser.add_argument('--dataset_size', default=1000, type=int, help='size of dataset (default: 1000)')
 	parser.add_argument('--cuda', default=True, type=str2bool, help='use GPU')
+	parser.add_argument('--n_forcing', default=1, type=int, help='number of forcing terms (default: 1)')
+	parser.add_argument('--forcing_type', default='lattice', type=str, help='type of choosing forcing points (default: lattice)', choices=['lattice','mid_lattice','random'])
 	parser.add_argument('--loss_bound', default=20, type=float, help='loss factor for boundary conditions')
 	parser.add_argument('--loss_cont', default=0, type=float, help='loss factor for continuity equation')
+	parser.add_argument('--loss_diff', default=10, type=float, help='loss factor for difference between predicted and pretrained model')
 	parser.add_argument('--loss_nav', default=1, type=float, help='loss factor for navier stokes equations')
 	parser.add_argument('--loss_rho', default=10, type=float, help='loss factor for keeping rho fixed')
 	parser.add_argument('--loss_mean_a', default=0, type=float, help='loss factor to keep mean of a around 0')
@@ -62,7 +65,9 @@ def params():
 	
 	# Load parameters
 	parser.add_argument('--load_date_time', default=None, type=str, help='date_time of run to load (default: None)')
+	parser.add_argument('--load_pretrained_date_time', default=None, type=str, help='date_time of pretrained model to load (default: None)')
 	parser.add_argument('--load_index', default=None, type=int, help='index of run to load (default: None)')
+	parser.add_argument('--load_pretrained_index', default=None, type=int, help='index of pretrained model to load (default: None)')
 	parser.add_argument('--load_optimizer', default=False, type=str2bool, help='load state of optimizer (default: True)')
 	parser.add_argument('--load_latest', default=False, type=str2bool, help='load latest version for training (if True: leave load_date_time and load_index None. default: False)')
 	
